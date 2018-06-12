@@ -1,0 +1,67 @@
+#!/bin/bash
+
+usage() { echo "Usage: $0 [-t <Test_Run>] [-p <Partition>]" 1>&2; exit 1; }
+
+while getopts ":t:p:" o; do
+    case "${o}" in
+        t)
+            t=${OPTARG}
+            ;;
+        p)
+            p=${OPTARG}
+            ;;
+        *)
+            usage
+            ;;
+    esac
+done
+shift $((OPTIND-1))
+
+if [ -z "${t}" ] || [ -z "${p}" ]; then
+    usage
+fi
+
+echo "TestRun = ${t}"
+echo "Partition = ${p}"
+
+path="$NS_WDIR/logs/TR${t}/${p}"
+
+echo $path
+
+if [ -d ${path} ];
+then
+    echo "partition exists"
+else
+    echo "partition does not exist"
+    exit
+fi
+
+declare -a rtg_arr
+declare -a gdf_arr
+gdf_packet_size=0
+rtg_file_size=0
+
+rtg_arr=( $(ls ${path} | egrep -woe rtgMessage.dat.. | sort | uniq) )
+rtg_arr+=( $(ls ${path} | egrep -woe rtgMessage.dat... | sort | uniq) )
+rtg_arr+=( $(ls ${path} | egrep -woe rtgMessage.dat.... | sort | uniq) )
+
+gdf_arr=( $(ls ${path} | egrep -woe testrun.gdf.. | sort | uniq ) )
+gdf_arr+=( $(ls ${path} | egrep -woe testrun.gdf... | sort | uniq ) )
+gdf_arr+=( $(ls ${path} | egrep -woe testrun.gdf.... | sort | uniq ) )
+
+#for (( i=0,j=0; [ i < ${#gdf_arr[@]} ] , [ j < ${#rtg_arr[@]} ] ; i++,j++ ))
+for (( i=0; i < ${#gdf_arr[@]} ; i++ ))
+do
+    packet_size=$(head -1 ${gdf_arr[i]} | awk -F'|' '{print $6}') 
+    rtg_file_size=$(ls -l ${rtg_arr[i]} | awk -F' ' '{print $5}')
+    #rem=$(( gdf_packet_size % rtg_file_size ))
+    #rem=$(( rtg_file_size % gdf_packet_size ))
+    #echo ${rem}
+    if [ `echo ${rtg_file_size} % ${packet_size} | bc ` -eq 0 ];
+    then
+	echo "${gdf_arr[i]}:$packet_size:${rtg_arr[i]}:$rtg_file_size:status:OK"
+    else
+        echo "${gdf_arr[i]}:$packet_size:${rtg_arr[i]}:$rtg_file_size:status:CORRUPT"
+    fi
+done
+
